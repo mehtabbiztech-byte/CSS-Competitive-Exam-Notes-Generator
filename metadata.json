@@ -1,0 +1,6 @@
+{
+  "name": "CSS Competitive Exam Notes Generator",
+  "description": "An AI-powered study companion and notes generator for Pakistan CSS (Central Superior Services) FPSC exam preparation, featuring syllabus tracking, custom material uploading, smart highlighting, and interactive reading.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
