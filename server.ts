@@ -11,24 +11,20 @@ app.use(express.json({ limit: "10mb" })); // support large document content uplo
 
 const PORT = 3000;
 
-// Lazy initialization of GoogleGenAI client to prevent startup crash if GEMINI_API_KEY is missing
-let aiClient: any = null;
-function getGeminiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
+// Lazy initialization of GoogleGenAI client with fallback to request header or env var
+function getGeminiClient(customApiKey?: string) {
+  const apiKey = (customApiKey && customApiKey.trim().length > 0) ? customApiKey.trim() : process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "") {
-    throw new Error("GEMINI_API_KEY environment variable is missing on Vercel. Please go to Vercel Dashboard -> Project Settings -> Environment Variables, add GEMINI_API_KEY, and Redeploy.");
+    throw new Error("GEMINI_API_KEY is missing. Please click 'Add API Key' in the top bar to set your key, or set GEMINI_API_KEY in Vercel Environment Variables.");
   }
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
+  return new GoogleGenAI({
+    apiKey: apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
       },
-    });
-  }
-  return aiClient;
+    },
+  });
 }
 
 // Helper function to call Gemini API with exponential backoff retry and model fallback
@@ -36,8 +32,9 @@ async function generateContentWithRetryAndFallback(params: {
   model: string;
   contents: any;
   config?: any;
+  apiKey?: string;
 }) {
-  const ai = getGeminiClient();
+  const ai = getGeminiClient(params.apiKey);
   let lastError: any = null;
   const modelsToTry = [params.model];
   
@@ -273,9 +270,12 @@ Subject matter: "${subject || 'Pakistan Affairs / Islamic Studies'}"`;
       };
     }
 
+    const requestApiKey = (req.headers["x-gemini-api-key"] as string) || req.body?.apiKey;
+
     const response = await generateContentWithRetryAndFallback({
       model: "gemini-3.5-flash",
       contents: prompt,
+      apiKey: requestApiKey,
       config: {
         systemInstruction: "You are an expert multilingual academic dictionary specialized in English, Urdu, Sindhi, and Roman Urdu. Provide accurate meanings, translations, definitions, parts of speech, synonyms, antonyms, and related CSS study topics. Also provide pronunciation/phonetics, mnemonics, CSS-specific exam usage advice, and a difficulty rating (Easy, Medium, Hard) relative to CSS candidates.",
         responseMimeType: "application/json",
@@ -312,9 +312,12 @@ Student's question: "${question}"
 
 Please answer in a highly professional, academic, exam-oriented manner. Provide precise explanations, structure points logically, and offer specific advice on how to present this argument in FPSC CSS answers (e.g., Essay, Pakistan Affairs, or Islamic Studies). Use clear paragraphs or bullet points.`;
 
+    const requestApiKey = (req.headers["x-gemini-api-key"] as string) || req.body?.apiKey;
+
     const response = await generateContentWithRetryAndFallback({
       model: "gemini-3.5-flash",
       contents: prompt,
+      apiKey: requestApiKey,
       config: {
         systemInstruction: "You are an elite CSS exam tutor from the Pakistan Civil Academy. Be precise, academic, encouraging, and authoritative. Answer concisely but deeply.",
       }
@@ -448,9 +451,12 @@ Depending on the requested language (English, Urdu, Sindhi, or Roman Urdu), writ
 6. List 2-3 sample CSS Past Exam questions at the bottom of the notes with a bulleted guidance on how to structure their answers.
 7. Integrate the provided custom knowledge base fully if present.`;
 
+    const requestApiKey = (req.headers["x-gemini-api-key"] as string) || req.body?.apiKey;
+
     const response = await generateContentWithRetryAndFallback({
       model: "gemini-3.5-flash",
       contents: prompt,
+      apiKey: requestApiKey,
       config: {
         systemInstruction,
         temperature: 0.7,

@@ -26,7 +26,11 @@ import {
   Info,
   ChevronRight,
   Sun,
-  Moon
+  Moon,
+  Key,
+  X,
+  Check,
+  ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -163,6 +167,19 @@ export default function App() {
   const [isLoadingRich, setIsLoadingRich] = useState(false);
   const [wordError, setWordError] = useState<string | null>(null);
 
+  // Gemini API Key management
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+    return localStorage.getItem("css_gemini_api_key") || "";
+  });
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState<boolean>(false);
+  const [tempApiKeyInput, setTempApiKeyInput] = useState<string>("");
+
+  useEffect(() => {
+    if (geminiApiKey) {
+      localStorage.setItem("css_gemini_api_key", geminiApiKey);
+    }
+  }, [geminiApiKey]);
+
   // Generator pre-fill links
   const [preSelectedSubId, setPreSelectedSubId] = useState<string | undefined>(undefined);
   const [preSelectedTopicId, setPreSelectedTopicId] = useState<string | undefined>(undefined);
@@ -297,18 +314,26 @@ export default function App() {
       // Stage A: Fetch essential fields (takes 1-2 seconds)
       const res = await fetch("/api/dictionary", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-gemini-api-key": geminiApiKey || ""
+        },
         body: JSON.stringify({
           word: cleanWord,
           context: sentenceContext,
           subject: subjectContext,
-          mode: "essential"
+          mode: "essential",
+          apiKey: geminiApiKey || ""
         })
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData?.error || "Failed to fetch dictionary analysis. Please check your GEMINI_API_KEY in Vercel.");
+        const errMsg = errorData?.error || "Failed to fetch dictionary analysis. Please check your GEMINI_API_KEY.";
+        if (errMsg.toLowerCase().includes("key")) {
+          setIsKeyModalOpen(true);
+        }
+        throw new Error(errMsg);
       }
 
       const essentialData = await res.json();
@@ -332,12 +357,16 @@ export default function App() {
 
       const richRes = await fetch("/api/dictionary", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-gemini-api-key": geminiApiKey || ""
+        },
         body: JSON.stringify({
           word: cleanWord,
           context: sentenceContext,
           subject: subjectContext,
-          mode: "rich"
+          mode: "rich",
+          apiKey: geminiApiKey || ""
         })
       });
 
@@ -510,8 +539,14 @@ export default function App() {
     try {
       const res = await fetch("/api/generate-notes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params)
+        headers: { 
+          "Content-Type": "application/json",
+          "x-gemini-api-key": geminiApiKey || ""
+        },
+        body: JSON.stringify({
+          ...params,
+          apiKey: geminiApiKey || ""
+        })
       });
 
       if (!res.ok) {
@@ -523,7 +558,7 @@ export default function App() {
         if (res.status === 504) {
           throw new Error("Generation request timed out on Vercel. Please check your Vercel Function maxDuration configuration.");
         }
-        throw new Error("Failed to generate CSS study notes. Please check that GEMINI_API_KEY is set in your Vercel Environment Variables.");
+        throw new Error("Failed to generate CSS study notes. Please click 'Add API Key' in the top bar to set your key.");
       }
 
       const noteData = await res.json();
@@ -576,7 +611,11 @@ export default function App() {
       setCurrentTab("notes");
 
     } catch (err: any) {
-      alert(err.message || "Notes generation failed. Please verify your GEMINI_API_KEY.");
+      const msg = err.message || "Notes generation failed. Please verify your GEMINI_API_KEY.";
+      alert(msg);
+      if (msg.toLowerCase().includes("key") || msg.toLowerCase().includes("vercel")) {
+        setIsKeyModalOpen(true);
+      }
     } finally {
       setIsGeneratingNote(false);
       // Clean up pre-selections
@@ -1224,6 +1263,27 @@ export default function App() {
             </button>
           </nav>
 
+          {/* API Key Settings Button */}
+          <button
+            onClick={() => {
+              setTempApiKeyInput(geminiApiKey);
+              setIsKeyModalOpen(true);
+            }}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
+              geminiApiKey
+                ? isDarkMode
+                  ? "bg-emerald-950/60 border-emerald-800/80 text-emerald-400 hover:bg-emerald-900/60"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                : isDarkMode
+                  ? "bg-amber-950/60 border-amber-800/80 text-amber-400 hover:bg-amber-900/60"
+                  : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+            }`}
+            title="Configure Gemini API Key for Vercel"
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{geminiApiKey ? "API Key Set" : "Add API Key"}</span>
+          </button>
+
           {/* Theme Switcher Button */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -1327,6 +1387,112 @@ export default function App() {
         onClose={() => setClickedWordInfo(null)}
         error={wordError}
       />
+
+      {/* API Key Configuration Modal */}
+      <AnimatePresence>
+        {isKeyModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className={`w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl border ${
+                isDarkMode ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-900"
+              }`}
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
+                    <Key className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif font-bold text-lg leading-tight">Gemini API Key Settings</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-sans">Configure key for instant Vercel AI Notes Generation</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsKeyModalOpen(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-4 font-sans text-xs">
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                  When deployed on Vercel, a Gemini API Key is required to generate custom AI notes, dictionary lookups, and AI Tutor answers.
+                </p>
+
+                <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-indigo-900 dark:text-indigo-200 space-y-2">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-indigo-500" />
+                    How to get a free key:
+                  </div>
+                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+                    <li>Visit <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 underline font-semibold inline-flex items-center gap-0.5">Google AI Studio <ExternalLink className="w-3 h-3" /></a></li>
+                    <li>Click <strong>"Create API Key"</strong></li>
+                    <li>Copy and paste your key in the box below</li>
+                  </ol>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Enter Gemini API Key
+                  </label>
+                  <input
+                    type="text"
+                    value={tempApiKeyInput}
+                    onChange={(e) => setTempApiKeyInput(e.target.value)}
+                    placeholder="Paste your Gemini API key here..."
+                    className="w-full px-4 py-3 rounded-xl border text-sm font-mono bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {geminiApiKey && (
+                  <div className="flex items-center justify-between text-[11px] p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                    <span className="flex items-center gap-1.5 font-medium truncate">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" /> Key saved locally ({geminiApiKey.substring(0, 10)}...)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGeminiApiKey("");
+                        setTempApiKeyInput("");
+                        localStorage.removeItem("css_gemini_api_key");
+                      }}
+                      className="text-rose-600 dark:text-rose-400 font-bold hover:underline shrink-0 ml-2"
+                    >
+                      Clear Key
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsKeyModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = tempApiKeyInput.trim();
+                    setGeminiApiKey(trimmed);
+                    localStorage.setItem("css_gemini_api_key", trimmed);
+                    setIsKeyModalOpen(false);
+                  }}
+                  className="px-6 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-950/20 transition-all"
+                >
+                  Save API Key
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
