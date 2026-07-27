@@ -307,7 +307,8 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error("Failed to fetch essential dictionary analysis.");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.error || "Failed to fetch dictionary analysis. Please check your GEMINI_API_KEY in Vercel.");
       }
 
       const essentialData = await res.json();
@@ -514,7 +515,15 @@ export default function App() {
       });
 
       if (!res.ok) {
-        throw new Error("Failed to generate CSS study notes.");
+        const errorData = await res.json().catch(() => ({}));
+        const serverError = errorData?.error || errorData?.message;
+        if (serverError) {
+          throw new Error(serverError);
+        }
+        if (res.status === 504) {
+          throw new Error("Generation request timed out on Vercel. Please check your Vercel Function maxDuration configuration.");
+        }
+        throw new Error("Failed to generate CSS study notes. Please check that GEMINI_API_KEY is set in your Vercel Environment Variables.");
       }
 
       const noteData = await res.json();

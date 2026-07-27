@@ -16,7 +16,7 @@ let aiClient: any = null;
 function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === "MY_GEMINI_API_KEY" || apiKey === "") {
-    throw new Error("GEMINI_API_KEY environment variable is not configured. Please add your Gemini API key in Settings > Secrets.");
+    throw new Error("GEMINI_API_KEY environment variable is missing on Vercel. Please go to Vercel Dashboard -> Project Settings -> Environment Variables, add GEMINI_API_KEY, and Redeploy.");
   }
   if (!aiClient) {
     aiClient = new GoogleGenAI({
